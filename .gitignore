@@ -1,0 +1,13 @@
+# Dependencies
+node_modules/
+
+# Build outputs (adjust based on your tsconfig "outDir")
+dist/
+build/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor / OS files
+.vscode/
