@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { parse, findConflicts, serialize } from '../src/sudoku/grid';
-import { solve, countSolutions, hasUniqueSolution } from '../src/sudoku/solver';
+import { parse, findConflicts, serialize } from '../src/engines/sudoku/grid';
+import { solve, countSolutions, hasUniqueSolution } from '../src/engines/sudoku/solver';
 
 const PUZZLE =
   '530070000600195000098000060800060003400803001700020006060000280000419005000080079';

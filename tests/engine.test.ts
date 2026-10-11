@@ -3,10 +3,11 @@ import {
   sudokuEngine,
   createState,
   countMistakes,
+  findWrongCells,
   type SudokuState,
-} from '../src/sudoku/engine';
-import { parse } from '../src/sudoku/grid';
-import { engines } from '../src/index';
+} from '../src/engines/sudoku/engine';
+import { parse, findConflicts } from '../src/engines/sudoku/grid';
+import { engines } from '../src/engines/index';
 
 const PUZZLE =
   '530070000600195000098000060800060003400803001700020006060000280000419005000080079';
@@ -75,6 +76,34 @@ describe('sudokuEngine', () => {
     it('throws on an invalid move', () => {
       const { puzzle } = fixture();
       expect(() => sudokuEngine.applyMove(puzzle, { index: 0, value: 9 })).toThrow();
+    });
+  });
+
+  describe('findWrongCells', () => {
+    it('flags a wrong digit that breaks no row/column/box rule', () => {
+      const { puzzle, solution } = fixture();
+      // Cell 2 must be 4. Pick a digit that no peer of cell 2 contains,
+      // so it is rule-legal but still wrong.
+      const peers = new Set<number>();
+      for (let k = 0; k < 9; k++) {
+        peers.add(puzzle.cells[k]); // row 0
+        peers.add(puzzle.cells[k * 9 + 2]); // column 2
+      }
+      for (const r of [0, 1, 2]) for (const c of [0, 1, 2]) peers.add(puzzle.cells[r * 9 + c]);
+      const legalWrong = [1, 2, 3, 4, 5, 6, 7, 8, 9].find(
+        (d) => d !== solution.cells[2] && !peers.has(d),
+      );
+      expect(legalWrong).toBeDefined();
+
+      const state = sudokuEngine.applyMove(puzzle, { index: 2, value: legalWrong! });
+      expect(findConflicts(state.cells).size).toBe(0); // no rule violation...
+      expect(findWrongCells(state, solution).has(2)).toBe(true); // ...but still wrong
+    });
+
+    it('ignores givens, empty cells and correct entries', () => {
+      const { puzzle, solution } = fixture();
+      const state = sudokuEngine.applyMove(puzzle, { index: 2, value: solution.cells[2] });
+      expect(findWrongCells(state, solution).size).toBe(0);
     });
   });
 

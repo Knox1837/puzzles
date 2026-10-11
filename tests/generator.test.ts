@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { generateSudoku, CLUE_TARGETS } from '../src/sudoku/generator';
-import { findConflicts } from '../src/sudoku/grid';
-import { countSolutions } from '../src/sudoku/solver';
-import type { Difficulty } from '../src/core/types';
+import { generateSudoku, CLUE_TARGETS } from '../src/engines/sudoku/generator';
+import { findConflicts } from '../src/engines/sudoku/grid';
+import { countSolutions } from '../src/engines/sudoku/solver';
+import type { Difficulty } from '../src/engines/core/types';
 
 const DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard', 'expert'];
 const clueCount = (cells: number[]) => cells.filter(Boolean).length;

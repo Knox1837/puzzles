@@ -19,15 +19,23 @@ export function createState(cells: readonly number[]): SudokuState {
   return { cells: cells.slice(), givens: cells.map((v) => v !== 0) };
 }
 
-/** Filled, non-given cells that differ from the solution (for mistake counts). */
-export function countMistakes(state: SudokuState, solution: SudokuState): number {
-  let mistakes = 0;
+/**
+ * Indices of filled, non-given cells whose value differs from the solution.
+ * Catches wrong digits even when they don't break a row/column/box rule.
+ */
+export function findWrongCells(state: SudokuState, solution: SudokuState): Set<number> {
+  const wrong = new Set<number>();
   for (let i = 0; i < CELLS; i++) {
     if (state.givens[i]) continue;
     const v = state.cells[i];
-    if (v !== 0 && v !== solution.cells[i]) mistakes++;
+    if (v !== 0 && v !== solution.cells[i]) wrong.add(i);
   }
-  return mistakes;
+  return wrong;
+}
+
+/** Number of currently wrong cells (for mistake counts). */
+export function countMistakes(state: SudokuState, solution: SudokuState): number {
+  return findWrongCells(state, solution).size;
 }
 
 export const sudokuEngine: PuzzleEngine<SudokuState, SudokuMove> = {
