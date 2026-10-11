@@ -113,6 +113,7 @@ button {
 
 select,
 .controls button,
+.tools button,
 .pad button {
   border: 1px solid var(--line);
   background: var(--surface);
@@ -261,8 +262,8 @@ button:disabled {
 /* Number pad */
 .pad {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 8px;
+  grid-template-columns: repeat(9, 1fr);
+  gap: 6px;
 }
 
 .pad button {
@@ -271,6 +272,7 @@ button:disabled {
   align-items: center;
   gap: 2px;
   padding: 8px 0;
+  min-width: 0;
 }
 
 .pad-digit {
@@ -281,11 +283,6 @@ button:disabled {
 .pad-left {
   font-size: 0.7rem;
   color: var(--ink-soft);
-}
-
-.pad .erase {
-  grid-column: span 1;
-  justify-content: center;
 }
 
 .hint,
@@ -303,4 +300,41 @@ button:disabled {
   .progress-fill {
     transition: none;
   }
+}
+
+/* Tools row: notes toggle + erase */
+.tools {
+  display: flex;
+  gap: 8px;
+}
+
+.tools button {
+  flex: 1;
+}
+
+.tools .notes-toggle[aria-pressed='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+/* Pencil notes: 3x3 mini grid inside a cell */
+.notes {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  width: 100%;
+  height: 100%;
+  padding: 2px;
+  font-size: calc(var(--cell) * 0.24);
+  font-weight: 500;
+  line-height: 1;
+  color: var(--ink-soft);
+}
+
+.notes span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }

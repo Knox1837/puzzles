@@ -5,6 +5,13 @@ import Board from './Board';
 import type { Difficulty } from '@/engines/core/types';
 import { findWrongCells, sudokuEngine, type SudokuState } from '@/engines/sudoku/engine';
 import { findConflicts } from '@/engines/sudoku/grid';
+import {
+  clearCellNotes,
+  clearPeerNotes,
+  emptyNotes,
+  toggleNote,
+  type Notes,
+} from '@/engines/sudoku/notes';
 
 const DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard', 'expert'];
 type Status = 'loading' | 'playing' | 'won';
@@ -27,6 +34,8 @@ export default function SudokuGame() {
   const [state, setState] = useState<SudokuState | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
   const [mistakes, setMistakes] = useState(0);
+  const [notes, setNotes] = useState<Notes>(emptyNotes);
+  const [notesMode, setNotesMode] = useState(false);
   const [status, setStatus] = useState<Status>('loading');
   const [elapsed, setElapsed] = useState(0);
   const startedAt = useRef(0);
@@ -39,6 +48,8 @@ export default function SudokuGame() {
     setState(puzzle);
     setSelected(null);
     setMistakes(0);
+    setNotes(emptyNotes());
+    setNotesMode(false);
     setElapsed(0);
     startedAt.current = Date.now();
     setStatus('playing');
@@ -62,17 +73,33 @@ export default function SudokuGame() {
       const move = { index: selected, value };
       if (!sudokuEngine.validateMove(state, move).ok) return;
 
+      const cellIsEmpty = state.cells[selected] === 0;
+
+      // Pencil mode: digits toggle notes, only on empty cells.
+      if (notesMode && value !== 0) {
+        if (cellIsEmpty) setNotes((prev) => toggleNote(prev, selected, value));
+        return;
+      }
+
+      // Erase on an empty cell clears its notes instead.
+      if (value === 0 && cellIsEmpty) {
+        setNotes((prev) => clearCellNotes(prev, selected));
+        return;
+      }
+
       const next = sudokuEngine.applyMove(state, move);
       setState(next);
-      if (value !== 0 && value !== solution.cells[selected]) {
-        setMistakes((m) => m + 1);
+      if (value !== 0) {
+        // Placing a digit clears this cell's notes and that digit from its peers.
+        setNotes((prev) => clearPeerNotes(prev, selected, value));
+        if (value !== solution.cells[selected]) setMistakes((m) => m + 1);
       }
       if (sudokuEngine.isComplete(next)) {
         setElapsed(Date.now() - startedAt.current);
         setStatus('won');
       }
     },
-    [status, state, solution, selected],
+    [status, state, solution, selected, notesMode],
   );
 
   // Keyboard: digits, backspace/delete, arrows.
@@ -83,6 +110,8 @@ export default function SudokuGame() {
         place(Number(e.key));
       } else if (e.key === '0' || e.key === 'Backspace' || e.key === 'Delete') {
         place(0);
+      } else if (e.key === 'n' || e.key === 'N') {
+        setNotesMode((m) => !m);
       } else if (e.key.startsWith('Arrow')) {
         e.preventDefault();
         setSelected((cur) => {
@@ -175,6 +204,7 @@ export default function SudokuGame() {
           selected={selected}
           conflicts={conflicts}
           wrong={wrong}
+          notes={notes}
           disabled={status === 'won'}
           onSelect={setSelected}
         />
@@ -193,6 +223,25 @@ export default function SudokuGame() {
         )}
       </div>
 
+      <div className="tools">
+        <button
+          type="button"
+          className="notes-toggle"
+          aria-pressed={notesMode}
+          onClick={() => setNotesMode((m) => !m)}
+          disabled={status !== 'playing'}
+        >
+          Notes: {notesMode ? 'On' : 'Off'}
+        </button>
+        <button
+          type="button"
+          onClick={() => place(0)}
+          disabled={status !== 'playing' || selected === null}
+        >
+          Erase
+        </button>
+      </div>
+
       <div className="pad" aria-label="Number pad">
         {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
           <button
@@ -206,17 +255,9 @@ export default function SudokuGame() {
             <span className="pad-left">{remaining[n]}</span>
           </button>
         ))}
-        <button
-          type="button"
-          className="erase"
-          onClick={() => place(0)}
-          disabled={status !== 'playing' || selected === null}
-        >
-          Erase
-        </button>
       </div>
 
-      <p className="hint">Click a cell, then type 1–9. Arrow keys move, Backspace erases.</p>
+      <p className="hint">Click a cell, then type 1–9. Arrow keys move, Backspace erases, N toggles pencil notes.</p>
       {seed && <p className="seed">Seed {seed}</p>}
     </div>
   );
