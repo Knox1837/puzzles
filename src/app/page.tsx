@@ -4,6 +4,7 @@ import styles from './home.module.css';
 const GAMES = [
   { href: '/sudoku', title: 'Sudoku', text: 'Race the clock on a fresh puzzle. Solo.' },
   { href: '/chess', title: 'Chess', text: 'Two players on one device, with optional clocks.' },
+  { href: '/chess/online', title: 'Chess online', text: 'Play a friend remotely with an invite link.' },
 ];
 
 export default function Home() {

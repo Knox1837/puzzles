@@ -2,8 +2,8 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Sudoku',
-  description: 'Race the clock on a fresh Sudoku.',
+  title: { default: 'Puzzle Engine', template: '%s | Puzzle Engine' },
+  description: 'Puzzles',
 };
 
 export const viewport: Viewport = {
