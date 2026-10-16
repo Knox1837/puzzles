@@ -1,8 +1,7 @@
 import { RoomError, type Room } from '@/engines/chess/room';
 
 /**
- * Persistence for rooms. Three primitives are enough to make every update
- * safe against two requests arriving at once (see updateRoom).
+ * Persistence for rooms. Three primitives are enough to make every update safe against two requests arriving at once (see updateRoom).
  */
 export interface RoomStore {
   get(id: string): Promise<Room | null>;
@@ -100,19 +99,30 @@ export function setStore(store: RoomStore | undefined): void {
 export async function getStore(): Promise<RoomStore> {
   if (globalForStore.__roomStore) return globalForStore.__roomStore;
 
-  // Works with the Upstash integration from the Vercel Marketplace (either naming).
-  const url = process.env.UPSTASH_REDIS_REST_URL ?? process.env.KV_REST_API_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN ?? process.env.KV_REST_API_TOKEN;
+  // 1. Upstash over HTTP (Vercel Marketplace integration, either naming).
+  const restUrl = process.env.UPSTASH_REDIS_REST_URL ?? process.env.KV_REST_API_URL;
+  const restToken = process.env.UPSTASH_REDIS_REST_TOKEN ?? process.env.KV_REST_API_TOKEN;
+  // 2. Any standard Redis server over TCP (Redis Cloud, etc.).
+  const redisUrl = process.env.REDIS_URL ?? process.env.KV_URL;
 
-  if (url && token) {
+  if (restUrl && restToken) {
     const { Redis } = await import('@upstash/redis');
     // Keep values as plain strings; we do our own JSON handling.
-    const redis = new Redis({ url, token, automaticDeserialization: false });
+    const redis = new Redis({ url: restUrl, token: restToken, automaticDeserialization: false });
     globalForStore.__roomStore = new RedisRoomStore(redis as unknown as RedisLike);
+  } else if (redisUrl) {
+    const { Redis: IORedis } = await import('ioredis');
+    // One connection per server instance, reused across requests.
+    const client = new IORedis(redisUrl, { maxRetriesPerRequest: 3, connectTimeout: 5000 });
+    client.on('error', (err: Error) => console.error('Redis connection error:', err.message));
+    globalForStore.__roomStore = new RedisRoomStore({
+      eval: (script, keys, args) => client.eval(script, keys.length, ...keys, ...args.map(String)),
+      hget: (key, field) => client.hget(key, field),
+    });
   } else if (process.env.VERCEL) {
     throw new RoomError(
       503,
-      'Online play is not set up yet: connect an Upstash Redis database to this project.',
+      'Online play is not set up yet: connect a Redis database (Upstash or Redis Cloud) to this project and redeploy.',
     );
   } else {
     globalForStore.__roomStore = new MemoryRoomStore();
@@ -121,9 +131,7 @@ export async function getStore(): Promise<RoomStore> {
 }
 
 /**
- * Read-modify-write with optimistic concurrency: if someone else changed the
- * room in between, re-read and re-apply. `fn` must be pure and may run more than
- * once. Return the same object to signal "no change" and skip the write.
+ * Read-modify-write with optimistic concurrency: if someone else changed the room in between, re-read and re-apply. `fn` must be pure and may run more than once. Return the same object to signal "no change" and skip the write.
  */
 export async function updateRoom(
   store: RoomStore,
