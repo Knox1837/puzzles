@@ -1,0 +1,130 @@
+/* Board and discs. Layout, panels and controls reuse ../chess/chess.module.css. */
+.board {
+  /* Seven columns spanning the same width as an 8-square chess board. */
+  --cf: calc(var(--sq) * 8 / 7);
+  --frame: #2455d6;
+  --frame-edge: #173a9c;
+  --red: #d93a3a;
+  --yellow: #f2c230;
+  display: grid;
+  grid-template-columns: repeat(7, var(--cf));
+  width: max-content;
+  padding: 6px;
+  border-radius: 14px;
+  background: var(--frame);
+  box-shadow: inset 0 0 0 3px var(--frame-edge);
+}
+
+@media (prefers-color-scheme: dark) {
+  .board {
+    --frame: #2b5fe0;
+    --frame-edge: #1b3fa6;
+  }
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.column:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.column:disabled {
+  cursor: default;
+}
+
+.column:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: -2px;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--cf);
+  height: var(--cf);
+}
+
+/* The hole: shows the page colour through the frame. */
+.hole {
+  position: relative;
+  width: 82%;
+  height: 82%;
+  border-radius: 50%;
+  background: var(--paper);
+  box-shadow: inset 0 3px 5px rgba(0, 0, 0, 0.35);
+  overflow: visible;
+}
+
+.disc {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow:
+    inset 0 -4px 6px rgba(0, 0, 0, 0.22),
+    inset 0 3px 4px rgba(255, 255, 255, 0.3);
+}
+
+.red {
+  background: var(--red);
+}
+
+.yellow {
+  background: var(--yellow);
+}
+
+/* The most recent disc falls in from the top of the board. */
+.dropped {
+  animation: drop calc(0.14s + var(--fall) * 0.045s) ease-in;
+}
+
+@keyframes drop {
+  from {
+    transform: translateY(calc(var(--fall) * var(--cf) * -1));
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+/* The winning four. */
+.win::after {
+  content: '';
+  position: absolute;
+  inset: 22%;
+  border-radius: 50%;
+  background: #fff;
+  opacity: 0.9;
+}
+
+.last:not(.win)::after {
+  content: '';
+  position: absolute;
+  inset: 40%;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.dotRed {
+  background: var(--red, #d93a3a);
+}
+
+.dotYellow {
+  background: var(--yellow, #f2c230);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dropped {
+    animation: none;
+  }
+}
