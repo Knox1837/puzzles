@@ -1,12 +1,12 @@
 import PageShell from '@/components/PageShell';
-import OnlineLobby from '@/components/chess/OnlineLobby';
+import OnlineLobby from '@/components/online/OnlineLobby';
 
 export const metadata = { title: 'Chess online' };
 
-export default function OnlineChessLobbyPage() {
+export default function OnlineLobbyPage() {
   return (
     <PageShell>
-      <OnlineLobby />
+      <OnlineLobby game="chess" />
     </PageShell>
   );
 }

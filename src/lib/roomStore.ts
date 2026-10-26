@@ -1,7 +1,8 @@
-import { RoomError, type Room } from '@/engines/chess/room';
+import { RoomError, type Room } from '@/engines/online/room';
 
 /**
- * Persistence for rooms. Three primitives are enough to make every update safe against two requests arriving at once (see updateRoom).
+ * Persistence for rooms. Three primitives are enough to make every update
+ * safe against two requests arriving at once (see updateRoom).
  */
 export interface RoomStore {
   get(id: string): Promise<Room | null>;
@@ -51,7 +52,7 @@ redis.call('HSET', KEYS[1], 'data', ARGV[2], 'version', ARGV[3])
 redis.call('EXPIRE', KEYS[1], ARGV[4])
 return 1`;
 
-/** The subset of the Upstash client we use. */
+/** The subset of the Redis clients we use. */
 export interface RedisLike {
   eval(script: string, keys: string[], args: unknown[]): Promise<unknown>;
   hget(key: string, field: string): Promise<unknown>;
@@ -61,7 +62,7 @@ export class RedisRoomStore implements RoomStore {
   constructor(private redis: RedisLike) {}
 
   private key(id: string) {
-    return `chess:room:${id}`;
+    return `room:${id}`;
   }
 
   async get(id: string): Promise<Room | null> {
@@ -131,7 +132,9 @@ export async function getStore(): Promise<RoomStore> {
 }
 
 /**
- * Read-modify-write with optimistic concurrency: if someone else changed the room in between, re-read and re-apply. `fn` must be pure and may run more than once. Return the same object to signal "no change" and skip the write.
+ * Read-modify-write with optimistic concurrency: if someone else changed the
+ * room in between, re-read and re-apply. `fn` must be pure and may run more than
+ * once. Return the same object to signal "no change" and skip the write.
  */
 export async function updateRoom(
   store: RoomStore,

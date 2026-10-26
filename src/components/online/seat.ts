@@ -1,19 +1,18 @@
-import type { Color } from '@/engines/chess/engine';
-
 /** Proof that this browser owns a seat in a game. Kept only in this browser. */
 export interface Seat {
   token: string;
-  color: Color;
+  /** Side id, e.g. "w" or "r". */
+  side: string;
 }
 
-const key = (roomId: string) => `chess-seat:${roomId}`;
+const key = (roomId: string) => `seat:${roomId}`;
 
 export function loadSeat(roomId: string): Seat | null {
   try {
     const raw = localStorage.getItem(key(roomId));
     if (!raw) return null;
     const seat = JSON.parse(raw) as Seat;
-    return seat && typeof seat.token === 'string' && (seat.color === 'w' || seat.color === 'b') ? seat : null;
+    return seat && typeof seat.token === 'string' && typeof seat.side === 'string' ? seat : null;
   } catch {
     return null;
   }

@@ -1,13 +1,13 @@
 import PageShell from '@/components/PageShell';
-import OnlineChessGame from '@/components/chess/OnlineChessGame';
+import OnlineGame from '@/components/online/OnlineGame';
 
-export const metadata = { title: 'Online chess' };
+export const metadata = { title: 'Chess online' };
 
-export default async function OnlineChessPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function OnlineGamePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   return (
     <PageShell>
-      <OnlineChessGame roomId={id} />
+      <OnlineGame game="chess" roomId={id} />
     </PageShell>
   );
 }

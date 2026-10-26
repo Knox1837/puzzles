@@ -1,4 +1,4 @@
-import { RoomError } from '@/engines/chess/room';
+import { RoomError } from '@/engines/online/room';
 
 export function json(data: unknown, status = 200): Response {
   return Response.json(data, { status, headers: { 'Cache-Control': 'no-store' } });

@@ -1,40 +1,42 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import ChessBoard, { pieceClass, pieceGlyph } from './ChessBoard';
+import { BOARDS } from './boards';
 import { loadSeat, saveSeat, type Seat } from './seat';
-import styles from './chess.module.css';
-import online from './online.module.css';
-import {
-  getBoard,
-  getStatus,
-  kingSquare,
-  legalMoves,
-  needsPromotion,
-  turn,
-  type ChessMove,
-  type Color,
-  type PromotionPiece,
-  type Square,
-} from '@/engines/chess/engine';
+import styles from '../chess/chess.module.css'; // shared layout: panels, controls, move list
+import online from '../chess/online.module.css';
+import { findGame } from '@/engines/online/games';
+import { clockSlot, describeResult, type OnlineGameDef, type RoomView } from '@/engines/online/room';
 import { TIME_CONTROLS, flagged, formatClock, remaining } from '@/engines/chess/clock';
-import { describeResult, type RoomView } from '@/engines/chess/room';
 
-const COLOR_NAME: Record<Color, string> = { w: 'White', b: 'Black' };
-const other = (c: Color): Color => (c === 'w' ? 'b' : 'w');
-const PROMOTION_CHOICES: PromotionPiece[] = ['q', 'r', 'b', 'n'];
-const PROMOTION_NAME = { q: 'Queen', r: 'Rook', b: 'Bishop', n: 'Knight' } as const;
+/** Colour of the little dot beside each side's name. */
+const DOT_COLOR: Record<string, string> = { w: '#ffffff', b: '#1a1a1a', r: '#d93a3a', y: '#f2c230' };
 
-export default function OnlineChessGame({ roomId }: { roomId: string }) {
+export default function OnlineGame({ game, roomId }: { game: string; roomId: string }) {
+  const def = findGame(game);
+  if (!def) {
+    return (
+      <div className={online.lobby}>
+        <h1 className={online.heading}>Unknown game</h1>
+        <Link href="/" className={online.link}>
+          Back to all games
+        </Link>
+      </div>
+    );
+  }
+  return <OnlineGameRoom def={def} roomId={roomId} />;
+}
+
+function OnlineGameRoom({ def, roomId }: { def: OnlineGameDef; roomId: string }) {
+  const Board = BOARDS[def.id];
+
   const [view, setView] = useState<RoomView | null>(null);
   const [seat, setSeat] = useState<Seat | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [offset, setOffset] = useState(0); // server time minus this browser's time
   const [, setTick] = useState(0);
-  const [selected, setSelected] = useState<Square | null>(null);
-  const [promo, setPromo] = useState<{ from: Square; to: Square } | null>(null);
   const [flippedOverride, setFlippedOverride] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -60,7 +62,7 @@ export default function OnlineChessGame({ roomId }: { roomId: string }) {
   const fetchRoom = useCallback(async () => {
     const sentAt = Date.now();
     try {
-      const res = await fetch(`/api/chess/rooms/${roomId}?v=${versionRef.current}`, { cache: 'no-store' });
+      const res = await fetch(`/api/rooms/${roomId}?v=${versionRef.current}`, { cache: 'no-store' });
       const receivedAt = Date.now();
       if (res.status === 404) {
         setNotFound(true);
@@ -116,12 +118,12 @@ export default function OnlineChessGame({ roomId }: { roomId: string }) {
   useEffect(() => {
     const el = movesRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [view?.game.moves.length]);
+  }, [view?.version]);
 
   const post = useCallback(
     async (body: Record<string, unknown>) => {
       const sentAt = Date.now();
-      const res = await fetch(`/api/chess/rooms/${roomId}`, {
+      const res = await fetch(`/api/rooms/${roomId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -139,7 +141,7 @@ export default function OnlineChessGame({ roomId }: { roomId: string }) {
     setBusy(true);
     try {
       const data = await post({ action: 'join', token: seat?.token });
-      const next: Seat = { token: data.token, color: data.color };
+      const next: Seat = { token: data.token, side: data.side };
       saveSeat(roomId, next);
       setSeat(next);
       setError(null);
@@ -150,21 +152,22 @@ export default function OnlineChessGame({ roomId }: { roomId: string }) {
     }
   };
 
-  const submitMove = async (move: ChessMove) => {
-    if (!seat) return;
-    setBusy(true);
-    setSelected(null);
-    setPromo(null);
-    try {
-      await post({ action: 'move', token: seat.token, ...move });
-      setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Move rejected');
-      fetchRoom(); // resync with the server's version of the game
-    } finally {
-      setBusy(false);
-    }
-  };
+  const submitMove = useCallback(
+    async (move: unknown) => {
+      if (!seat) return;
+      setBusy(true);
+      try {
+        await post({ action: 'move', token: seat.token, move });
+        setError(null);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Move rejected');
+        fetchRoom(); // resync with the server's version of the game
+      } finally {
+        setBusy(false);
+      }
+    },
+    [seat, post, fetchRoom],
+  );
 
   const resign = async () => {
     if (!seat || !window.confirm('Resign this game?')) return;
@@ -189,43 +192,19 @@ export default function OnlineChessGame({ roomId }: { roomId: string }) {
     }
   };
 
-  const myColor = seat?.color ?? null;
-  const board = useMemo(() => (view ? getBoard(view.game) : null), [view]);
-  const toMove = view ? turn(view.game) : 'w';
-  const playing = view?.status === 'playing';
-  const myTurn = playing && myColor === toMove;
-
-  const selectedMoves = useMemo(
-    () => (view && selected ? legalMoves(view.game, selected) : []),
-    [view, selected],
-  );
-  const targets = useMemo(() => new Set(selectedMoves.map((m) => m.to)), [selectedMoves]);
-  const captures = useMemo(
-    () => new Set(selectedMoves.filter((m) => m.captured).map((m) => m.to)),
-    [selectedMoves],
-  );
-
-  const status = useMemo(() => (view ? getStatus(view.game) : null), [view]);
-  const checkSquare = useMemo(() => {
-    if (!view || !status) return null;
-    if (status.kind === 'playing' && status.check) return kingSquare(view.game, toMove);
-    if (status.kind === 'checkmate') return kingSquare(view.game, other(status.winner));
-    return null;
-  }, [view, status, toMove]);
-
   if (notFound) {
     return (
       <div className={online.lobby}>
         <h1 className={online.heading}>Game not found</h1>
         <p className={online.notice}>This game does not exist or has expired (games are kept for a day).</p>
-        <Link href="/chess/online" className={online.link}>
+        <Link href={`/${def.id}/online`} className={online.link}>
           Start a new game
         </Link>
       </div>
     );
   }
 
-  if (!view || !board) {
+  if (!view) {
     return (
       <div className={online.lobby}>
         <p className={online.notice}>Loading game…</p>
@@ -238,43 +217,34 @@ export default function OnlineChessGame({ roomId }: { roomId: string }) {
     );
   }
 
-  const lastMove = view.game.moves.length ? view.game.moves[view.game.moves.length - 1] : null;
-  const flipped = flippedOverride ?? myColor === 'b';
+  const [first, second] = def.sides;
+  const mySide = seat?.side ?? null;
+  const toMove = def.turn(view.state);
+  const playing = view.status === 'playing';
+  const myTurn = playing && mySide === toMove;
   const timed = view.clock.control !== null;
-  const freeSeat: Color | null = !view.seats.w ? 'w' : !view.seats.b ? 'b' : null;
-  const canJoin = !myColor && freeSeat !== null && view.status === 'waiting';
-  const spectating = !myColor && !canJoin;
+  const freeSide = def.sides.find((s) => !view.seats[s]) ?? null;
+  const canJoin = !mySide && freeSide !== null && view.status === 'waiting';
+  const spectating = !mySide && !canJoin;
   const timeLabel = TIME_CONTROLS.find((t) => t.id === view.timeControlId)?.label ?? view.timeControlId;
+  const flipped = def.flippable ? (flippedOverride ?? mySide === second) : false;
 
-  const onSquareClick = (sq: Square) => {
-    if (!myColor || !myTurn || busy || promo) return;
-
-    if (selected && targets.has(sq)) {
-      if (needsPromotion(view.game, selected, sq)) setPromo({ from: selected, to: sq });
-      else submitMove({ from: selected, to: sq });
-      return;
-    }
-
-    const file = sq.charCodeAt(0) - 97;
-    const rank = 8 - Number(sq[1]);
-    if (board[rank][file]?.color === myColor) setSelected(sq === selected ? null : sq);
-    else setSelected(null);
-  };
-
-  const panel = (color: Color) => {
-    const left = remaining(view.clock, color, estNow);
-    const active = view.status === 'playing' && toMove === color;
-    const joined = color === 'w' ? view.seats.w : view.seats.b;
+  const panel = (side: string) => {
+    const left = remaining(view.clock, clockSlot(def, side), estNow);
+    const active = playing && toMove === side;
     return (
       <div className={`${styles.panel} ${active ? styles.panelActive : ''}`}>
         <span className={styles.name}>
-          <span className={`${styles.dot} ${color === 'w' ? styles.dotWhite : styles.dotBlack}`} />
-          {COLOR_NAME[color]}
-          {myColor === color && <span className={online.you}>(you)</span>}
-          {!joined && <span className={online.you}>waiting…</span>}
+          <span className={styles.dot} style={{ background: DOT_COLOR[side] }} />
+          {def.sideNames[side]}
+          {mySide === side && <span className={online.you}>(you)</span>}
+          {!view.seats[side] && <span className={online.you}>waiting…</span>}
         </span>
         {timed && (
-          <span className={`${styles.clock} ${left < 10_000 ? styles.clockLow : ''}`} aria-label={`${COLOR_NAME[color]} time`}>
+          <span
+            className={`${styles.clock} ${left < 10_000 ? styles.clockLow : ''}`}
+            aria-label={`${def.sideNames[side]} time`}
+          >
             {formatClock(left)}
           </span>
         )}
@@ -282,35 +252,41 @@ export default function OnlineChessGame({ roomId }: { roomId: string }) {
     );
   };
 
-  const rows: { no: number; w: string; b?: string }[] = [];
-  view.game.moves.forEach((m, i) => {
-    if (i % 2 === 0) rows.push({ no: i / 2 + 1, w: m.san });
-    else rows[rows.length - 1].b = m.san;
+  // Numbered rows: the side that moves first, then its opponent.
+  const notation = def.notation(view.state);
+  const rows: { no: number; a: string; b?: string }[] = [];
+  notation.forEach((text, i) => {
+    if (i % 2 === 0) rows.push({ no: i / 2 + 1, a: text });
+    else rows[rows.length - 1].b = text;
   });
 
   let banner: string | null = null;
   if (view.result) {
-    const text = describeResult(view.result);
+    const text = describeResult(def, view.result);
     banner =
-      myColor && view.result.winner
-        ? `${view.result.winner === myColor ? 'You won' : 'You lost'}: ${text}`
+      mySide && view.result.winner
+        ? `${view.result.winner === mySide ? 'You won' : 'You lost'}: ${text}`
         : text;
-  } else if (view.status === 'playing') {
-    const check = status?.kind === 'playing' && status.check ? ' (check)' : '';
-    banner = myColor
-      ? `${myTurn ? 'Your move' : "Opponent's move"}${check}`
-      : `${COLOR_NAME[toMove]} to move${check}`;
+  } else if (playing) {
+    const note = def.note(view.state);
+    const suffix = note ? ` (${note})` : '';
+    banner = mySide
+      ? `${myTurn ? 'Your move' : "Opponent's move"}${suffix}`
+      : `${def.sideNames[toMove]} to move${suffix}`;
   }
 
-  const topColor: Color = flipped ? 'w' : 'b';
-  const bottomColor: Color = flipped ? 'b' : 'w';
+  // Each side sees its own pieces at the bottom.
+  const topSide = flipped ? first : second;
+  const bottomSide = flipped ? second : first;
 
   return (
     <div className={styles.game}>
       {canJoin && (
         <div className={online.invite}>
-          <p>You&apos;ve been invited to a game ({timeLabel}).</p>
-          <span>You would play {COLOR_NAME[freeSeat!]}.</span>
+          <p>
+            You&apos;ve been invited to a game of {def.title} ({timeLabel}).
+          </p>
+          <span>You would play {def.sideNames[freeSide!]}.</span>
           <button type="button" className={online.primary} onClick={joinGame} disabled={busy}>
             Join game
           </button>
@@ -319,7 +295,7 @@ export default function OnlineChessGame({ roomId }: { roomId: string }) {
 
       {spectating && <p className={online.notice}>This game is full. You are watching.</p>}
 
-      {myColor && view.status === 'waiting' && (
+      {mySide && view.status === 'waiting' && (
         <div className={online.invite}>
           <p>Send this link to your opponent</p>
           <input readOnly value={window.location.href} onFocus={(e) => e.currentTarget.select()} aria-label="Invite link" />
@@ -329,47 +305,20 @@ export default function OnlineChessGame({ roomId }: { roomId: string }) {
         </div>
       )}
 
-      {panel(topColor)}
+      {panel(topSide)}
 
-      <div className={styles.boardWrap}>
-        <ChessBoard
-          state={view.game}
-          flipped={flipped}
-          selected={selected}
-          targets={targets}
-          captures={captures}
-          lastMove={lastMove ? { from: lastMove.from, to: lastMove.to } : null}
-          checkSquare={checkSquare}
-          disabled={view.status === 'finished'}
-          onSquareClick={onSquareClick}
-        />
+      {/* Remounted on every change so half-finished selections never go stale. */}
+      <Board
+        key={view.version}
+        state={view.state}
+        mySide={mySide}
+        canMove={myTurn && !busy}
+        disabled={view.status === 'finished'}
+        flipped={flipped}
+        onMove={submitMove}
+      />
 
-        {promo && myColor && (
-          <div className={styles.overlay} role="dialog" aria-label="Choose promotion piece">
-            <div className={styles.dialog}>
-              <h2>Promote to</h2>
-              <div className={styles.promoRow}>
-                {PROMOTION_CHOICES.map((p) => (
-                  <button
-                    key={p}
-                    type="button"
-                    className={styles.promoBtn}
-                    aria-label={PROMOTION_NAME[p]}
-                    onClick={() => submitMove({ ...promo, promotion: p })}
-                  >
-                    <span className={pieceClass(myColor)}>{pieceGlyph(p)}</span>
-                  </button>
-                ))}
-              </div>
-              <button type="button" className={styles.smallBtn} onClick={() => setPromo(null)}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {panel(bottomColor)}
+      {panel(bottomSide)}
 
       {banner && (
         <p className={styles.result} role="status">
@@ -383,28 +332,30 @@ export default function OnlineChessGame({ roomId }: { roomId: string }) {
       )}
 
       <div className={styles.controls}>
-        <button type="button" onClick={() => setFlippedOverride(!flipped)}>
-          Flip board
-        </button>
+        {def.flippable && (
+          <button type="button" onClick={() => setFlippedOverride(!flipped)}>
+            Flip board
+          </button>
+        )}
         <button type="button" onClick={copyLink}>
           {copied ? 'Copied!' : 'Copy invite link'}
         </button>
-        <button type="button" onClick={resign} disabled={!myColor || view.status !== 'playing' || busy}>
+        <button type="button" onClick={resign} disabled={!mySide || !playing || busy}>
           Resign
         </button>
-        <Link href="/chess/online" className={online.link}>
+        <Link href={`/${def.id}/online`} className={online.link}>
           New game
         </Link>
       </div>
 
       <div className={styles.moves} ref={movesRef} aria-label="Move list">
         {rows.length === 0 ? (
-          <span className={styles.movesEmpty}>No moves yet. White to start.</span>
+          <span className={styles.movesEmpty}>No moves yet. {def.sideNames[first]} to start.</span>
         ) : (
           rows.map((r) => (
             <div key={r.no} className={styles.moveRow}>
               <span className={styles.moveNo}>{r.no}.</span>
-              <span>{r.w}</span>
+              <span>{r.a}</span>
               <span>{r.b ?? ''}</span>
             </div>
           ))
@@ -413,7 +364,7 @@ export default function OnlineChessGame({ roomId }: { roomId: string }) {
 
       <p className={styles.hint}>
         Game code <strong>{view.id}</strong>
-        {timed ? ' · clocks start after White’s first move' : ''}
+        {timed ? ' · clocks start after the first move' : ''}
       </p>
     </div>
   );

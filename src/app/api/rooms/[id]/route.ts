@@ -1,12 +1,5 @@
-import {
-  RoomError,
-  joinRoom,
-  playMove,
-  resignRoom,
-  settle,
-  toView,
-} from '@/engines/chess/room';
-import type { ChessMove, Color, PromotionPiece, Square } from '@/engines/chess/engine';
+import { RoomError, joinRoom, playMove, resignRoom, settle, toView } from '@/engines/online/room';
+import { getGame } from '@/engines/online/games';
 import { ROOM_ID_PATTERN, newToken } from '@/lib/ids';
 import { getStore, updateRoom } from '@/lib/roomStore';
 import { errorResponse, json, readJson } from '@/lib/http';
@@ -32,7 +25,7 @@ export async function GET(req: Request, ctx: Ctx) {
     const store = await getStore();
     const now = Date.now();
 
-    const room = await updateRoom(store, id, (r) => settle(r, now));
+    const room = await updateRoom(store, id, (r) => settle(getGame(r.game), r, now));
     if (!room) throw new RoomError(404, 'Game not found');
 
     const since = Number(new URL(req.url).searchParams.get('v'));
@@ -45,25 +38,9 @@ export async function GET(req: Request, ctx: Ctx) {
   }
 }
 
-const SQUARE = /^[a-h][1-8]$/;
-
-function parseMove(body: Record<string, unknown>): ChessMove {
-  const { from, to, promotion } = body;
-  if (typeof from !== 'string' || !SQUARE.test(from) || typeof to !== 'string' || !SQUARE.test(to)) {
-    throw new RoomError(400, 'Invalid move');
-  }
-  if (promotion !== undefined && promotion !== null && !['q', 'r', 'b', 'n'].includes(promotion as string)) {
-    throw new RoomError(400, 'Invalid promotion piece');
-  }
-  return {
-    from: from as Square,
-    to: to as Square,
-    ...(promotion ? { promotion: promotion as PromotionPiece } : {}),
-  };
-}
-
 /**
- * Body: { action: 'join' | 'move' | 'resign', token?, from?, to?, promotion? }
+ * Body: { action: 'join' | 'move' | 'resign', token?, move? }
+ * `move` is the game's own move shape, e.g. { from, to } for chess or { column } for Connect Four.
  * Always replies { view, ... } with the new state.
  */
 export async function POST(req: Request, ctx: Ctx) {
@@ -75,26 +52,28 @@ export async function POST(req: Request, ctx: Ctx) {
     const token = typeof body.token === 'string' ? body.token : null;
 
     let room;
-    const joined: { color?: Color; token?: string } = {};
+    const joined: { side?: string; token?: string } = {};
 
     switch (body.action) {
       case 'join': {
         const fresh = newToken();
         room = await updateRoom(store, id, (r) => {
-          const res = joinRoom(r, token, fresh);
-          joined.color = res.color;
+          const res = joinRoom(getGame(r.game), r, token, fresh);
+          joined.side = res.side;
           joined.token = res.token;
           return res.room;
         });
         break;
       }
       case 'move': {
-        const move = parseMove(body);
-        room = await updateRoom(store, id, (r) => playMove(r, token, move, now));
+        room = await updateRoom(store, id, (r) => {
+          const def = getGame(r.game);
+          return playMove(def, r, token, def.parseMove(body.move), now);
+        });
         break;
       }
       case 'resign': {
-        room = await updateRoom(store, id, (r) => resignRoom(r, token, now));
+        room = await updateRoom(store, id, (r) => resignRoom(getGame(r.game), r, token, now));
         break;
       }
       default:

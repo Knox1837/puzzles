@@ -1,9 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { MemoryRoomStore, updateRoom } from '../src/lib/roomStore';
-import { createRoom, joinRoom, playMove } from '../src/engines/chess/room';
+import { createRoom, joinRoom, playMove } from '../src/engines/online/room';
+import { getGame } from '../src/engines/online/games';
+
+const def = getGame('chess');
 
 function fresh() {
-  return createRoom({ id: 'room0001', timeControlId: 'untimed', token: 'tok-w', color: 'w', now: 1 });
+  return createRoom(def, { id: 'room0001', timeControlId: 'untimed', token: 'tok-w', side: 'w', now: 1 });
 }
 
 describe('MemoryRoomStore', () => {
@@ -34,7 +37,7 @@ describe('updateRoom', () => {
   it('applies the change and returns the new room', async () => {
     const store = new MemoryRoomStore();
     await store.create(fresh());
-    const room = await updateRoom(store, 'room0001', (r) => joinRoom(r, null, 'tok-b').room);
+    const room = await updateRoom(store, 'room0001', (r) => joinRoom(def, r, null, 'tok-b').room);
     expect(room!.seats.b).toBe('tok-b');
     expect((await store.get('room0001'))!.version).toBe(2);
   });
@@ -54,7 +57,7 @@ describe('updateRoom', () => {
     const store = new MemoryRoomStore();
     await store.create(fresh());
     const base = (await store.get('room0001'))!;
-    const joined = joinRoom(base, null, 'tok-b').room; // version 2
+    const joined = joinRoom(def, base, null, 'tok-b').room; // version 2
 
     // Wrap the store so a competing write lands right after our first read.
     let interfered = false;
@@ -72,7 +75,7 @@ describe('updateRoom', () => {
 
     // Our update plays e4; it must be re-applied on top of the competing join.
     const result = await updateRoom(racing, 'room0001', (r) =>
-      r.seats.b ? playMove(r, 'tok-w', { from: 'e2', to: 'e4' }, 5) : { ...r, version: r.version + 1 },
+      r.seats.b ? playMove(def, r, 'tok-w', { from: 'e2', to: 'e4' }, 5) : { ...r, version: r.version + 1 },
     );
     expect(result!.seats.b).toBe('tok-b'); // the competing write survived
     expect(result!.version).toBeGreaterThanOrEqual(3);
