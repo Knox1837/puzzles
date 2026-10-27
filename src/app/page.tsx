@@ -6,7 +6,9 @@ const GAMES = [
   { href: '/chess', title: 'Chess', text: 'Two players on one device, with optional clocks.' },
   { href: '/chess/online', title: 'Chess online', text: 'Play a friend remotely with an invite link.' },
   { href: '/checkers', title: 'Checkers', text: 'Classic 8x8 checkers for two players on one device, with optional clocks.' },
+  { href: '/checkers/online', title: 'Checkers online', text: 'Play a friend remotely with an invite link.' },
   { href: '/connect4', title: 'Connect Four', text: 'Drop discs and line up four. Two players on one device, with optional clocks.' },
+  { href: '/connect4/online', title: 'Connect Four online', text: 'Play a friend remotely with an invite link.' },
 ];
 
 export default function Home() {
